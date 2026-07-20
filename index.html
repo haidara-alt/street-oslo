@@ -164,7 +164,7 @@
   "use strict";
 
   // ================= Load data =================
-  const raw = await (await fetch('oslo_data.json')).json();
+  const raw = await (await fetch('oslo_street_data.js')).json();
   const nodes = raw.nodes;   // [lon, lat]
   const edges = raw.edges;   // [u, v, length, midGeom[[lon,lat],...]]
   const statusEl = document.getElementById('status');
