@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Oslo Postman Route Planner Pro</title>
+<style>
+  :root{
+    --ink:#1c2321;
+    --paper:#f6f3ec;
+    --line:#2b2e33;
+    --steel:#3b6e8f;
+    --steel-soft:rgba(59,110,143,0.18);
+    --route:#e0562f;
+    --start:#2fa84f;
+    --amber:#d98c2b;
+    --muted:#8a8f92;
+    --shadow:0 4px 20px rgba(0,0,0,0.3);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--ink);color:var(--paper);}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;}
+
+  /* ---- Toolbar ---- */
+  #toolbar{
+    background:var(--ink);
+    padding:10px 12px 8px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    z-index:20;
+    border-bottom:1px solid rgba(255,255,255,0.08);
+    box-shadow:var(--shadow);
+  }
+  #title{
+    font-size:13px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    font-weight:600;
+  }
+  #title span{color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px;font-size:12px;}
+  #buttons{display:flex;gap:6px;flex-wrap:wrap;}
+  button.tool{
+    flex:1 1 auto;
+    min-width:74px;
+    background:#262d2c;
+    color:var(--paper);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:8px;
+    padding:9px 6px;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:0.02em;
+    cursor:pointer;
+    transition:background .15s, transform .1s;
+  }
+  button.tool:active{transform:scale(0.96);}
+  button.tool.active{background:var(--steel);border-color:var(--steel);}
+  button.tool:disabled{opacity:0.35;cursor:not-allowed;}
+  button.tool.danger{background:#3a1f1a;}
+  button.tool.success{background:#1f3a2a;}
+  #status{
+    font-size:11.5px;
+    color:var(--muted);
+    min-height:15px;
+    font-family:'SF Mono',ui-monospace,Menlo,monospace;
+  }
+
+  /* ---- Map ---- */
+  #mapWrap{flex:1;position:relative;background:var(--paper);overflow:hidden;touch-action:none;}
+  svg{width:100%;height:100%;display:block;}
+  #basePath{fill:none;stroke:var(--line);stroke-width:2.5;stroke-linecap:round;opacity:0.55;}
+  #selPath{fill:none;stroke:var(--steel);stroke-width:3.5;stroke-linecap:round;opacity:0.9;}
+  #dupPath{fill:none;stroke:var(--amber);stroke-width:4;stroke-linecap:round;opacity:0.95;}
+  #routePath{fill:none;stroke:var(--route);stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round;}
+  #selRect{fill:var(--steel-soft);stroke:var(--steel);stroke-width:2;stroke-dasharray:5,4;pointer-events:none;}
+  #startMarker{fill:var(--start);stroke:#0c3a19;stroke-width:1.5;display:none;}
+  #playMarker{fill:var(--route);stroke:#fff;stroke-width:1.5;display:none;}
+  #brushOverlay{pointer-events:none;opacity:0.2;}
+
+  #hint{
+    position:absolute;left:10px;bottom:10px;
+    background:rgba(28,35,33,0.92);color:var(--paper);
+    padding:8px 12px;border-radius:8px;font-size:12px;line-height:1.4;
+    max-width:70%;pointer-events:none;
+    backdrop-filter:blur(4px);
+    border:1px solid rgba(255,255,255,0.05);
+  }
+
+  /* ---- Results panel ---- */
+  #panel{
+    background:var(--ink);
+    border-top:1px solid rgba(255,255,255,0.1);
+    padding:0 14px;
+    max-height:0;
+    overflow:hidden;
+    transition:max-height .3s ease, padding .3s ease;
+    z-index:20;
+    box-shadow:0 -4px 20px rgba(0,0,0,0.2);
+  }
+  #panel.open{max-height:280px;padding:12px 14px 14px;}
+  #stats{
+    display:flex;
+    gap:14px;
+    font-family:'SF Mono',ui-monospace,Menlo,monospace;
+    font-size:12px;
+    color:var(--paper);
+    flex-wrap:wrap;
+    margin-bottom:10px;
+  }
+  #stats div b{display:block;color:var(--amber);font-size:16px;font-weight:700;}
+  #stats div span{color:var(--muted);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;}
+  #playRow{display:flex;align-items:center;gap:10px;}
+  #playBtn{
+    background:var(--route);color:#fff;border:none;border-radius:50%;
+    width:42px;height:42px;font-size:16px;cursor:pointer;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    transition:transform .1s;
+  }
+  #playBtn:active{transform:scale(0.92);}
+  #progressWrap{flex:1;height:6px;background:rgba(255,255,255,0.12);border-radius:4px;overflow:hidden;}
+  #progressBar{height:100%;width:0%;background:var(--route);}
+  #speedLabel{font-size:11px;color:var(--muted);white-space:nowrap;font-family:'SF Mono',ui-monospace,Menlo,monospace;}
+  input[type=range]{width:70px;}
+  #stepInfo{
+    font-size:11px;
+    color:var(--muted);
+    font-family:'SF Mono',ui-monospace,Menlo,monospace;
+    margin-top:6px;
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  /* ---- Import/Export ---- */
+  #ioRow{
+    display:flex;
+    gap:8px;
+    margin-top:6px;
+  }
+  #ioRow button{
+    background:#262d2c;
+    color:var(--paper);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:6px;
+    padding:6px 12px;
+    font-size:11px;
+    cursor:pointer;
+    transition:background .15s;
+  }
+  #ioRow button:hover{background:#3a4240;}
+  #ioRow input{display:none;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <div id="title">OSLO POSTMAN ROUTE PLANNER PRO <span>smart route optimization</span></div>
+    <div id="buttons">
+      <button class="tool active" id="btnPan">Pan / Zoom</button>
+      <button class="tool" id="btnArea">Paint Area</button>
+      <button class="tool" id="btnStart" disabled>Set Start</button>
+      <button class="tool" id="btnRun" disabled>Optimize</button>
+      <button class="tool danger" id="btnReset">Reset</button>
+    </div>
+    <div id="status">Loading street data…</div>
+  </div>
+
+  <div id="mapWrap">
+    <svg id="map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+      <path id="basePath" d=""></path>
+      <path id="selPath" d=""></path>
+      <path id="dupPath" d=""></path>
+      <rect id="selRect" x="0" y="0" width="0" height="0"></rect>
+      <circle id="brushOverlay" r="30" fill="var(--steel)" opacity="0.15"></circle>
+      <path id="routePath" d=""></path>
+      <circle id="startMarker" r="5"></circle>
+      <circle id="playMarker" r="6"></circle>
+    </svg>
+    <div id="hint">Paint an area, then set a start point, then hit Optimize.</div>
+  </div>
+
+  <div id="panel">
+    <div id="stats">
+      <div><b id="statSteps">–</b><span>steps</span></div>
+      <div><b id="statDist">–</b><span>route km</span></div>
+      <div><b id="statStreets">–</b><span>street km</span></div>
+      <div><b id="statOverhead">–</b><span>overhead</span></div>
+      <div><b id="statTurns">–</b><span>turns</span></div>
+    </div>
+    <div id="playRow">
+      <button id="playBtn">▶</button>
+      <div id="progressWrap"><div id="progressBar"></div></div>
+      <span id="speedLabel">speed</span>
+      <input type="range" id="speedSlider" min="1" max="10" value="4">
+      <button id="stepForward" style="background:#262d2c;border:1px solid rgba(255,255,255,0.1);border-radius:50%;width:32px;height:32px;color:#fff;cursor:pointer;">→</button>
+      <button id="stepBackward" style="background:#262d2c;border:1px solid rgba(255,255,255,0.1);border-radius:50%;width:32px;height:32px;color:#fff;cursor:pointer;">←</button>
+    </div>
+    <div id="stepInfo">
+      <span id="currentStep">Step 0 / 0</span>
+      <span id="directionInfo">Direction: –</span>
+    </div>
+    <div id="ioRow">
+      <button id="exportBtn">📤 Export Route</button>
+      <button id="importBtn">📥 Import Route</button>
+      <input type="file" id="importInput" accept=".json">
+    </div>
+  </div>
+</div>
+
+<script>
+(async function(){
+  "use strict";
+
+  // ================= Load data =================
+  const raw = await (await fetch('https://haidara-alt.github.io/Data-file/oslo_data.json')).json();
+  const nodes = raw.nodes;
+  const edges = raw.edges;
+  const statusEl = document.getElementById('status');
+
+  // ================= Projection =================
+  let lonMin=Infinity, lonMax=-Infinity, latMin=Infinity, latMax=-Infinity;
+  for (const n of nodes){
+    if(n[0]<lonMin) lonMin=n[0];
+    if(n[0]>lonMax) lonMax=n[0];
+    if(n[1]<latMin) latMin=n[1];
+    if(n[1]>latMax) latMax=n[1];
+  }
+  const latMid = (latMin+latMax)/2;
+  const cosLat = Math.cos(latMid*Math.PI/180);
+  const SCALE = 100000;
+  function proj(lon,lat){
+    return [ (lon-lonMin)*cosLat*SCALE, (latMax-lat)*SCALE ];
+  }
+  const projected = new Float64Array(nodes.length*2);
+  for (let i=0;i<nodes.length;i++){
+    const p = proj(nodes[i][0], nodes[i][1]);
+    projected[i*2]=p[0]; projected[i*2+1]=p[1];
+  }
+  function px(i){ return projected[i*2]; }
+  function py(i){ return projected[i*2+1]; }
+  function unproj(x,y){
+    return [ x/(cosLat*SCALE) + lonMin, latMax - y/SCALE ];
+  }
+
+  const worldW = (lonMax-lonMin)*cosLat*SCALE;
+  const worldH = (latMax-latMin)*SCALE;
+
+  // ================= Base map path =================
+  const svg = document.getElementById('map');
+  const basePathEl = document.getElementById('basePath');
+  {
+    let d = '';
+    for (const e of edges){
+      const [u,v,len,mid] = e;
+      d += 'M'+px(u).toFixed(1)+','+py(u).toFixed(1)+' ';
+      if (mid && mid.length){
+        for (const m of mid){
+          const p = proj(m[0], m[1]);
+          d += 'L'+p[0].toFixed(1)+','+p[1].toFixed(1)+' ';
+        }
+      }
+      d += 'L'+px(v).toFixed(1)+','+py(v).toFixed(1)+' ';
+    }
+    basePathEl.setAttribute('d', d);
+  }
+
+  // ================= ViewBox / pan / zoom =================
+  const pad = Math.max(worldW,worldH)*0.03;
+  let vb = { x:-pad, y:-pad, w:worldW+2*pad, h:worldH+2*pad };
+  function applyVB(){
+    svg.setAttribute('viewBox', vb.x+' '+vb.y+' '+vb.w+' '+vb.h);
+  }
+  applyVB();
+
+  function clientToSVG(clientX, clientY){
+    const pt = svg.createSVGPoint();
+    pt.x = clientX; pt.y = clientY;
+    const ctm = svg.getScreenCTM().inverse();
+    const p = pt.matrixTransform(ctm);
+    return {x:p.x, y:p.y};
+  }
+
+  let mode = 'pan';
+  const btnPan = document.getElementById('btnPan');
+  const btnArea = document.getElementById('btnArea');
+  const btnStart = document.getElementById('btnStart');
+  const btnRun = document.getElementById('btnRun');
+  const btnReset = document.getElementById('btnReset');
+  const hint = document.getElementById('hint');
+  const brushOverlay = document.getElementById('brushOverlay');
+
+  function setMode(m){
+    mode = m;
+    [btnPan,btnArea,btnStart].forEach(b=>b.classList.remove('active'));
+    if(m==='pan') btnPan.classList.add('active');
+    if(m==='area') btnArea.classList.add('active');
+    if(m==='start') btnStart.classList.add('active');
+    if(m==='pan') hint.textContent = 'Drag to pan, scroll/pinch to zoom.';
+    if(m==='area') hint.textContent = 'Paint the area you want covered. Hold and drag to paint.';
+    if(m==='start') hint.textContent = 'Tap the street corner you want to start (and end) at.';
+  }
+  btnPan.onclick = ()=>setMode('pan');
+  btnArea.onclick = ()=>setMode('area');
+  btnStart.onclick = ()=>{ if(!btnStart.disabled) setMode('start'); };
+
+  // ---- wheel zoom ----
+  document.getElementById('mapWrap').addEventListener('wheel', function(e){
+    e.preventDefault();
+    const p = clientToSVG(e.clientX, e.clientY);
+    const factor = e.deltaY < 0 ? 0.88 : 1.14;
+    const newW = vb.w*factor, newH = vb.h*factor;
+    vb.x = p.x - (p.x - vb.x)*factor;
+    vb.y = p.y - (p.y - vb.y)*factor;
+    vb.w = newW; vb.h = newH;
+    applyVB();
+  }, {passive:false});
+
+  // ---- pointer drag: pan / paint area / set start ----
+  let dragging=false, dragStartClient=null, dragStartVB=null;
+  const selRectEl = document.getElementById('selRect');
+
+  svg.addEventListener('pointerdown', function(e){
+    svg.setPointerCapture(e.pointerId);
+    dragging = true;
+    dragStartClient = {x:e.clientX, y:e.clientY};
+    dragStartVB = {...vb};
+    if (mode==='area'){
+      const p = clientToSVG(e.clientX, e.clientY);
+      selRectEl.setAttribute('x', p.x - 15);
+      selRectEl.setAttribute('y', p.y - 15);
+      selRectEl.setAttribute('width', 30);
+      selRectEl.setAttribute('height', 30);
+      brushOverlay.setAttribute('cx', p.x);
+      brushOverlay.setAttribute('cy', p.y);
+    }
+  });
+
+  svg.addEventListener('pointermove', function(e){
+    if(!dragging) return;
+    if (mode==='pan'){
+      const rect = svg.getBoundingClientRect();
+      const scale = dragStartVB.w / rect.width;
+      const dx = (e.clientX - dragStartClient.x) * scale;
+      const dy = (e.clientY - dragStartClient.y) * scale;
+      vb.x = dragStartVB.x - dx;
+      vb.y = dragStartVB.y - dy;
+      applyVB();
+    } else if (mode==='area'){
+      const p = clientToSVG(e.clientX, e.clientY);
+      const curX = parseFloat(selRectEl.getAttribute('x') || 0);
+      const curY = parseFloat(selRectEl.getAttribute('y') || 0);
+      const curW = parseFloat(selRectEl.getAttribute('width') || 0);
+      const curH = parseFloat(selRectEl.getAttribute('height') || 0);
+      
+      // Expand the selection to include the brush area
+      const brushSize = 30;
+      const newX = Math.min(curX, p.x - brushSize/2);
+      const newY = Math.min(curY, p.y - brushSize/2);
+      const newW = Math.max(curX + curW - newX, p.x + brushSize/2 - newX);
+      const newH = Math.max(curY + curH - newY, p.y + brushSize/2 - newY);
+      
+      selRectEl.setAttribute('x', newX);
+      selRectEl.setAttribute('y', newY);
+      selRectEl.setAttribute('width', newW);
+      selRectEl.setAttribute('height', newH);
+      brushOverlay.setAttribute('cx', p.x);
+      brushOverlay.setAttribute('cy', p.y);
+    }
+  });
+
+  svg.addEventListener('pointerup', function(e){
+    if(!dragging) return;
+    dragging = false;
+    if (mode==='area'){
+      finalizeAreaSelection();
+    } else if (mode==='start'){
+      const p = clientToSVG(e.clientX, e.clientY);
+      pickStartNode(p.x, p.y);
+    }
+  });
+
+  // ---- pinch zoom ----
+  let pinchStartDist=null, pinchStartVB=null, pinchMid=null;
+  document.getElementById('mapWrap').addEventListener('touchstart', function(e){
+    if (e.touches.length===2){
+      const [a,b] = e.touches;
+      pinchStartDist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+      pinchStartVB = {...vb};
+      pinchMid = clientToSVG((a.clientX+b.clientX)/2, (a.clientY+b.clientY)/2);
+      dragging = false;
+    }
+  }, {passive:true});
+  document.getElementById('mapWrap').addEventListener('touchmove', function(e){
+    if (e.touches.length===2 && pinchStartDist){
+      e.preventDefault();
+      const [a,b] = e.touches;
+      const dist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+      const factor = pinchStartDist / dist;
+      vb.w = pinchStartVB.w * factor;
+      vb.h = pinchStartVB.h * factor;
+      vb.x = pinchMid.x - (pinchMid.x - pinchStartVB.x) * factor;
+      vb.y = pinchMid.y - (pinchMid.y - pinchStartVB.y) * factor;
+      applyVB();
+    }
+  }, {passive:false});
+  document.getElementById('mapWrap').addEventListener('touchend', function(e){
+    if (e.touches.length<2) pinchStartDist=null;
+  });
+
+  // ================= Area selection =================
+  const selPathEl = document.getElementById('selPath');
+  let selection = null;
+
+  function finalizeAreaSelection(){
+    const x = parseFloat(selRectEl.getAttribute('x'));
+    const y = parseFloat(selRectEl.getAttribute('y'));
+    const w = parseFloat(selRectEl.getAttribute('width'));
+    const h = parseFloat(selRectEl.getAttribute('height'));
+    if (w < 10 || h < 10){ return; }
+
+    const c1 = unproj(x,y), c2 = unproj(x+w,y+h);
+    const bbox = {
+      lonMin: Math.min(c1[0],c2[0]), lonMax: Math.max(c1[0],c2[0]),
+      latMin: Math.min(c1[1],c2[1]), latMax: Math.max(c1[1],c2[1])
+    };
+    const nodeSet = new Set();
+    for (let i=0;i<nodes.length;i++){
+      const [lon,lat] = nodes[i];
+      if (lon>=bbox.lonMin && lon<=bbox.lonMax && lat>=bbox.latMin && lat<=bbox.latMax) nodeSet.add(i);
+    }
+    const edgeList = [];
+    for (const e of edges){
+      if (nodeSet.has(e[0]) && nodeSet.has(e[1])) edgeList.push(e);
+    }
+    selection = {bbox, nodeSet, edgeList};
+
+    let d = '';
+    for (const e of edgeList){
+      d += 'M'+px(e[0]).toFixed(1)+','+py(e[0]).toFixed(1)+' L'+px(e[1]).toFixed(1)+','+py(e[1]).toFixed(1)+' ';
+    }
+    selPathEl.setAttribute('d', d);
+
+    statusEl.textContent = `Selected ${nodeSet.size} intersections, ${edgeList.length} street segments.`;
+    btnStart.disabled = false;
+    resetRun();
+    setMode('start');
+  }
+
+  // ================= Start point =================
+  let startNode = null;
+  const startMarkerEl = document.getElementById('startMarker');
+
+  function pickStartNode(x,y){
+    if (!selection) return;
+    let best=null, bestD=Infinity;
+    for (const i of selection.nodeSet){
+      const dx = px(i)-x, dy = py(i)-y;
+      const d = dx*dx+dy*dy;
+      if (d<bestD){bestD=d; best=i;}
+    }
+    if (best===null) return;
+    startNode = best;
+    startMarkerEl.setAttribute('cx', px(best));
+    startMarkerEl.setAttribute('cy', py(best));
+    startMarkerEl.style.display = 'block';
+    statusEl.textContent = 'Start point set. Ready to optimize.';
+    btnRun.disabled = false;
+  }
+
+  // ================= Reset =================
+  function resetRun(){
+    document.getElementById('dupPath').setAttribute('d','');
+    document.getElementById('routePath').setAttribute('d','');
+    document.getElementById('playMarker').style.display='none';
+    document.getElementById('panel').classList.remove('open');
+    pauseAnim();
+    btnRun.disabled = !(selection && startNode!==null);
+  }
+  btnReset.onclick = function(){
+    selection = null; startNode = null;
+    selPathEl.setAttribute('d','');
+    selRectEl.setAttribute('width',0);
+    selRectEl.setAttribute('height',0);
+    startMarkerEl.style.display='none';
+    btnStart.disabled = true; btnRun.disabled = true;
+    statusEl.textContent = 'Cleared. Paint a new area to begin.';
+    resetRun();
+    setMode('area');
+  };
+
+  // ================= Worker (smart route computation) =================
+  const workerCode = `
+    class MinHeap{
+      constructor(){this.arr=[];}
+      push(item){
+        this.arr.push(item);
+        let i=this.arr.length-1;
+        while(i>0){
+          const p=(i-1)>>1;
+          if(this.arr[p][0]<=this.arr[i][0])break;
+          [this.arr[p],this.arr[i]]=[this.arr[i],this.arr[p]];
+          i=p;
+        }
+      }
+      pop(){
+        const top=this.arr[0];
+        const last=this.arr.pop();
+        if(this.arr.length>0){
+          this.arr[0]=last;
+          let i=0;
+          while(true){
+            let l=2*i+1,r=2*i+2,s=i;
+            if(l<this.arr.length&&this.arr[l][0]<this.arr[s][0])s=l;
+            if(r<this.arr.length&&this.arr[r][0]<this.arr[s][0])s=r;
+            if(s===i)break;
+            [this.arr[s],this.arr[i]]=[this.arr[i],this.arr[s]];
+            i=s;
+          }
+        }
+        return top;
+      }
+      get size(){return this.arr.length;}
+    }
+    
+    function buildAdj(n,edgeList){
+      const adj=Array.from({length:n},()=>[]);
+      edgeList.forEach((e)=>{
+        const [u,v,length,geom] = e;
+        adj[u].push({to:v,length,geom});
+        adj[v].push({to:u,length,geom});
+      });
+      return adj;
+    }
+    
+    function dijkstra(adj,source,target,validSet){
+      const dist=new Map(), prev=new Map(), prevEdge=new Map();
+      dist.set(source,0);
+      const heap=new MinHeap();
+      heap.push([0,source]);
+      const visited=new Set();
+      while(heap.size>0){
+        const [d,u]=heap.pop();
+        if(visited.has(u))continue;
+        visited.add(u);
+        if(u===target)break;
+        for(const {to,length} of adj[u]){
+          if(!validSet.has(to))continue;
+          const nd=d+length;
+          if(!dist.has(to)||nd<dist.get(to)){
+            dist.set(to,nd); prev.set(to,u); prevEdge.set(to,{from:u,to});
+            heap.push([nd,to]);
+          }
+        }
+      }
+      return {dist,prev,prevEdge};
+    }
+    
+    function reconstructPath(prev,prevEdge,source,target){
+      const path=[target]; const edgePath=[];
+      let cur=target;
+      while(cur!==source){
+        const e=prevEdge.get(cur);
+        edgePath.push(e);
+        cur=prev.get(cur);
+        path.push(cur);
+      }
+      path.reverse();
+      edgePath.reverse();
+      return {nodes:path, edges:edgePath};
+    }
+    
+    function computeAngle(p1,p2,p3){
+      const v1x=p2.x-p1.x, v1y=p2.y-p1.y;
+      const v2x=p3.x-p2.x, v2y=p3.y-p2.y;
+      const dot=v1x*v2x+v1y*v2y;
+      const mag1=Math.sqrt(v1x*v1x+v1y*v1y);
+      const mag2=Math.sqrt(v2x*v2x+v2y*v2y);
+      if(mag1===0||mag2===0)return 0;
+      const cosA=Math.max(-1,Math.min(1,dot/(mag1*mag2)));
+      return Math.acos(cosA)*180/Math.PI;
+    }
+    
+    function greedyRoute(adj, nodes, edges, start, nodeSet, edgeSet) {
+      const remaining = new Set(edges);
+      const route = [start];
+      const usedEdges = new Set();
+      let current = start;
+      let totalLength = 0;
+      let turnCount = 0;
+      let direction = null;
+      
+      // Get coordinates for nodes
+      const coords = new Map();
+      for(let i=0;i<nodes.length;i++){
+        coords.set(i, {x: px(i), y: py(i)});
+      }
+      
+      // Build graph for traversal
+      const graph = new Map();
+      for(const e of edges){
+        const [u,v,len] = e;
+        if(!graph.has(u)) graph.set(u, []);
+        if(!graph.has(v)) graph.set(v, []);
+        graph.get(u).push({to:v, len, id:e});
+        graph.get(v).push({to:u, len, id:e});
+      }
+      
+      let steps = 0;
+      const maxSteps = edges.length * 3;
+      
+      while(remaining.size > 0 && steps < maxSteps){
+        steps++;
+        const neighbors = graph.get(current) || [];
+        let best = null;
+        let bestScore = Infinity;
+        let bestEdge = null;
+        
+        // Get current direction
+        let currentDir = direction;
+        
+        for(const n of neighbors){
+          if(!usedEdges.has(n.id) && remaining.has(n.id)){
+            // Calculate turn cost
+            let turnCost = 0;
+            if(currentDir !== null && route.length > 1){
+              const prevNode = route[route.length-2];
+              const p1 = coords.get(prevNode);
+              const p2 = coords.get(current);
+              const p3 = coords.get(n.to);
+              if(p1 && p2 && p3){
+                const angle = computeAngle(p1, p2, p3);
+                // Penalize sharp turns and U-turns
+                if(angle > 150) turnCost = 100; // U-turn
+                else if(angle > 90) turnCost = 20; // Sharp turn
+                else if(angle > 45) turnCost = 5; // Medium turn
+              }
+            }
+            
+            // Reward continuing straight (same direction)
+            let straightBonus = 0;
+            if(currentDir !== null && route.length > 1){
+              const prevNode = route[route.length-2];
+              const p1 = coords.get(prevNode);
+              const p2 = coords.get(current);
+              const p3 = coords.get(n.to);
+              if(p1 && p2 && p3){
+                const angle = computeAngle(p1, p2, p3);
+                if(angle < 30) straightBonus = -15; // Continue straight
+              }
+            }
+            
+            // Score: distance + turn cost - straight bonus
+            const score = n.len + turnCost + straightBonus;
+            
+            if(score < bestScore){
+              bestScore = score;
+              best = n;
+              bestEdge = n.id;
+            }
+          }
+        }
+        
+        if(best === null){
+          // Dead end - need to backtrack
+          // Find any unvisited edge from current node
+          let backtrack = null;
+          for(const n of neighbors){
+            if(!usedEdges.has(n.id)){
+              backtrack = n;
+              break;
+            }
+          }
+          if(backtrack === null){
+            // No edges left from current, find nearest node with unvisited edges
+            let minDist = Infinity;
+            let nearestNode = null;
+            for(const node of nodeSet){
+              if(node === current) continue;
+              const dist = Math.abs(coords.get(node).x - coords.get(current).x) + 
+                          Math.abs(coords.get(node).y - coords.get(current).y);
+              if(dist < minDist){
+                // Check if this node has any unvisited edges
+                const nodeNeighbors = graph.get(node) || [];
+                for(const n2 of nodeNeighbors){
+                  if(!usedEdges.has(n2.id) && remaining.has(n2.id)){
+                    minDist = dist;
+                    nearestNode = node;
+                    break;
+                  }
+                }
+              }
+            }
+            if(nearestNode !== null){
+              // Move to nearest node (will be handled by adding to route)
+              route.push(nearestNode);
+              current = nearestNode;
+              continue;
+            } else {
+              break;
+            }
+          } else {
+            best = backtrack;
+            bestEdge = backtrack.id;
+          }
+        }
+        
+        if(best){
+          // Update direction
+          if(route.length > 1){
+            const prevNode = route[route.length-2];
+            const p1 = coords.get(prevNode);
+            const p2 = coords.get(current);
+            const p3 = coords.get(best.to);
+            if(p1 && p2 && p3){
+              direction = {x: p3.x - p2.x, y: p3.y - p2.y};
+            }
+          }
+          
+          remaining.delete(bestEdge);
+          usedEdges.add(bestEdge);
+          totalLength += best.len;
+          route.push(best.to);
+          current = best.to;
+        }
+      }
+      
+      // Calculate turns
+      turnCount = 0;
+      for(let i=1; i<route.length-1; i++){
+        const p1 = coords.get(route[i-1]);
+        const p2 = coords.get(route[i]);
+        const p3 = coords.get(route[i+1]);
+        if(p1 && p2 && p3){
+          const angle = computeAngle(p1, p2, p3);
+          if(angle > 90) turnCount++;
+        }
+      }
+      
+      return {route, totalLength, turnCount, visitedEdges: usedEdges};
+    }
+    
+    function hierarchicalOptimization(nodeCount, edgeList, startNode, nodeSet) {
+      // First pass: Greedy route with turn optimization
+      const adj = buildAdj(nodeCount, edgeList);
+      const coords = new Map();
+      for(let i=0;i<nodeCount;i++){
+        coords.set(i, {x: px(i), y: py(i)});
+      }
+      
+      // Get all edges that need to be traversed
+      const edgeSet = new Set(edgeList);
+      const result = greedyRoute(adj, nodes, edgeList, startNode, nodeSet, edgeSet);
+      
+      // Second pass: Fill in any missing edges using Dijkstra
+      const remainingEdges = edgeList.filter(e => !result.visitedEdges.has(e));
+      
+      if(remainingEdges.length > 0){
+        // Add remaining edges using shortest path connections
+        let current = result.route[result.route.length-1];
+        for(const edge of remainingEdges){
+          const [u,v,len] = edge;
+          // Find closest point on route to start of missing edge
+          let bestDist = Infinity;
+          let bestNode = null;
+          for(const node of result.route){
+            const dist = Math.abs(coords.get(node).x - coords.get(u).x) + 
+                        Math.abs(coords.get(node).y - coords.get(u).y);
+            if(dist < bestDist){
+              bestDist = dist;
+              bestNode = node;
+            }
+          }
+          if(bestNode !== null){
+            // Route to missing edge
+            const pathResult = dijkstra(adj, bestNode, u, nodeSet);
+            const path = reconstructPath(pathResult.prev, pathResult.prevEdge, bestNode, u);
+            // Add path nodes to route
+            for(let i=1; i<path.nodes.length; i++){
+              result.route.push(path.nodes[i]);
+            }
+            // Add the missing edge
+            result.route.push(v);
+            result.totalLength += len;
+          }
+        }
+      }
+      
+      // Close the loop by returning to start
+      if(result.route[0] !== result.route[result.route.length-1]){
+        const pathResult = dijkstra(adj, result.route[result.route.length-1], startNode, nodeSet);
+        const path = reconstructPath(pathResult.prev, pathResult.prevEdge, result.route[result.route.length-1], startNode);
+        for(let i=1; i<path.nodes.length; i++){
+          result.route.push(path.nodes[i]);
+        }
+      }
+      
+      return result;
+    }
+
+    self.onmessage = function(e){
+      const {nodeCount, edgeList, startNode} = e.data;
+      const nodeSet = new Set();
+      edgeList.forEach(ed=>{nodeSet.add(ed[0]); nodeSet.add(ed[1]);});
+      
+      // Initialize px, py function for the worker
+      const coords = new Map();
+      for(let i=0;i<nodeCount;i++){
+        coords.set(i, {x: px(i), y: py(i)});
+      }
+      
+      const result = hierarchicalOptimization(nodeCount, edgeList, startNode, nodeSet);
+      
+      self.postMessage({
+        circuit: result.route,
+        totalStreets: edgeList.reduce((s,e)=>s+e[2],0),
+        totalRoute: result.totalLength,
+        turnCount: result.turnCount,
+        stepCount: result.route.length-1
+      });
+    };
+  `;
+  const workerBlob = new Blob([workerCode], {type:'application/javascript'});
+  const worker = new Worker(URL.createObjectURL(workerBlob));
+
+  btnRun.onclick = function(){
+    if (!selection || startNode===null) return;
+    statusEl.textContent = 'Computing smart route…';
+    btnRun.disabled = true;
+    worker.postMessage({
+      nodeCount: nodes.length,
+      edgeList: selection.edgeList,
+      startNode: startNode
+    });
+  };
+
+  worker.onmessage = function(e){
+    btnRun.disabled = false;
+    const res = e.data;
+    if (res.error){
+      statusEl.textContent = res.error;
+      return;
+    }
+    statusEl.textContent = 'Route optimized.';
+    showResult(res);
+  };
+
+  // ================= Show result =================
+  let currentCircuit = null;
+  function showResult(res){
+    currentCircuit = res.circuit;
+
+    document.getElementById('dupPath').setAttribute('d', '');
+    
+    let rd = 'M'+px(currentCircuit[0]).toFixed(1)+','+py(currentCircuit[0]).toFixed(1)+' ';
+    for (let i=1;i<currentCircuit.length;i++){
+      rd += 'L'+px(currentCircuit[i]).toFixed(1)+','+py(currentCircuit[i]).toFixed(1)+' ';
+    }
+    const routeEl = document.getElementById('routePath');
+    routeEl.setAttribute('d', rd);
+
+    document.getElementById('statSteps').textContent = res.stepCount;
+    document.getElementById('statDist').textContent = (res.totalRoute/1000).toFixed(2);
+    document.getElementById('statStreets').textContent = (res.totalStreets/1000).toFixed(2);
+    document.getElementById('statOverhead').textContent = ((res.totalRoute - res.totalStreets)/res.totalStreets*100).toFixed(0)+'%';
+    document.getElementById('statTurns').textContent = res.turnCount || 0;
+    document.getElementById('panel').classList.add('open');
+
+    setupAnim(routeEl);
+  }
+
+  // ================= Playback animation =================
+  let animLen=0, animRAF=null, animStart=null, animElapsed=0, playing=false;
+  const routeEl0 = document.getElementById('routePath');
+  const playMarker = document.getElementById('playMarker');
+  const playBtn = document.getElementById('playBtn');
+  const progressBar = document.getElementById('progressBar');
+  const speedSlider = document.getElementById('speedSlider');
+  const currentStepEl = document.getElementById('currentStep');
+  const directionInfo = document.getElementById('directionInfo');
+  const stepForward = document.getElementById('stepForward');
+  const stepBackward = document.getElementById('stepBackward');
+
+  function setupAnim(pathEl){
+    animLen = pathEl.getTotalLength();
+    pathEl.style.strokeDasharray = animLen;
+    pathEl.style.strokeDashoffset = animLen;
+    animElapsed = 0;
+    playing = false;
+    playBtn.textContent = '▶';
+    playMarker.style.display = 'block';
+    const start = pathEl.getPointAtLength(0);
+    playMarker.setAttribute('cx', start.x);
+    playMarker.setAttribute('cy', start.y);
+    progressBar.style.width = '0%';
+    currentStepEl.textContent = `Step 0 / ${currentCircuit.length-1}`;
+    updateDirection(0);
+  }
+
+  function updateDirection(step){
+    if(!currentCircuit || step >= currentCircuit.length-1) return;
+    const p1 = {x: px(currentCircuit[step]), y: py(currentCircuit[step])};
+    const p2 = {x: px(currentCircuit[step+1]), y: py(currentCircuit[step+1])};
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    let dir = '';
+    if(angle > -22.5 && angle <= 22.5) dir = '→ East';
+    else if(angle > 22.5 && angle <= 67.5) dir = '↗ NE';
+    else if(angle > 67.5 && angle <= 112.5) dir = '↑ North';
+    else if(angle > 112.5 && angle <= 157.5) dir = '↖ NW';
+    else if(angle > 157.5 || angle <= -157.5) dir = '← West';
+    else if(angle > -157.5 && angle <= -112.5) dir = '↙ SW';
+    else if(angle > -112.5 && angle <= -67.5) dir = '↓ South';
+    else if(angle > -67.5 && angle <= -22.5) dir = '↘ SE';
+    directionInfo.textContent = `Direction: ${dir}`;
+    currentStepEl.textContent = `Step ${step} / ${currentCircuit.length-1}`;
+  }
+
+  function pauseAnim(){
+    playing = false;
+    if (animRAF) cancelAnimationFrame(animRAF);
+    playBtn.textContent = '▶';
+  }
+
+  function speedKmPerSec(){
+    const v = parseInt(speedSlider.value,10);
+    return 0.3 + (v-1) * 0.63;
+  }
+
+  function tick(ts){
+    if (!playing) return;
+    if (animStart===null) animStart = ts - animElapsed;
+    animElapsed = ts - animStart;
+    const speed = speedKmPerSec()*1000;
+    const dist = Math.min(animLen, animElapsed/1000*speed);
+    routeEl0.style.strokeDashoffset = animLen - dist;
+    const pt = routeEl0.getPointAtLength(dist);
+    playMarker.setAttribute('cx', pt.x);
+    playMarker.setAttribute('cy', pt.y);
+    const progress = dist/animLen;
+    progressBar.style.width = (progress*100)+'%';
+    
+    // Update step info
+    const step = Math.floor(progress * (currentCircuit.length-1));
+    if(step < currentCircuit.length-1) updateDirection(step);
+    
+    if (dist >= animLen){
+      playing = false;
+      playBtn.textContent = '▶';
+      currentStepEl.textContent = `Step ${currentCircuit.length-1} / ${currentCircuit.length-1} - Complete!`;
+      return;
+    }
+    animRAF = requestAnimationFrame(tick);
+  }
+
+  function goToStep(step){
+    if(!currentCircuit || step < 0 || step >= currentCircuit.length) return;
+    const progress = step / (currentCircuit.length-1);
+    const dist = progress * animLen;
+    routeEl0.style.strokeDashoffset = animLen - dist;
+    const pt = routeEl0.getPointAtLength(dist);
+    playMarker.setAttribute('cx', pt.x);
+    playMarker.setAttribute('cy', pt.y);
+    progressBar.style.width = (progress*100)+'%';
+    updateDirection(step);
+    currentStepEl.textContent = `Step ${step} / ${currentCircuit.length-1}`;
+  }
+
+  playBtn.onclick = function(){
+    if (!currentCircuit) return;
+    if (playing){
+      pauseAnim();
+    } else {
+      if (parseFloat(routeEl0.style.strokeDashoffset||animLen) <= 0){
+        animElapsed = 0;
+        routeEl0.style.strokeDashoffset = animLen;
+        progressBar.style.width = '0%';
+      }
+      playing = true;
+      animStart = null;
+      playBtn.textContent = '❚❚';
+      animRAF = requestAnimationFrame(tick);
+    }
+  };
+
+  stepForward.onclick = function(){
+    if(!currentCircuit) return;
+    const currentStep = Math.floor(parseFloat(progressBar.style.width || '0') / 100 * (currentCircuit.length-1));
+    const nextStep = Math.min(currentStep + 1, currentCircuit.length-1);
+    goToStep(nextStep);
+  };
+
+  stepBackward.onclick = function(){
+    if(!currentCircuit) return;
+    const currentStep = Math.floor(parseFloat(progressBar.style.width || '0') / 100 * (currentCircuit.length-1));
+    const prevStep = Math.max(currentStep - 1, 0);
+    goToStep(prevStep);
+  };
+
+  // ================= Import/Export =================
+  document.getElementById('exportBtn').onclick = function(){
+    if(!currentCircuit) return;
+    const data = {
+      route: currentCircuit,
+      stats: {
+        steps: document.getElementById('statSteps').textContent,
+        distance: document.getElementById('statDist').textContent,
+        streets: document.getElementById('statStreets').textContent,
+        overhead: document.getElementById('statOverhead').textContent,
+        turns: document.getElementById('statTurns').textContent
+      }
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'oslo_route.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  document.getElementById('importBtn').onclick = function(){
+    document.getElementById('importInput').click();
+  };
+
+  document.getElementById('importInput').onchange = function(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      try {
+        const data = JSON.parse(ev.target.result);
+        if(data.route && data.route.length > 0){
+          currentCircuit = data.route;
+          const routeEl = document.getElementById('routePath');
+          let rd = 'M'+px(currentCircuit[0]).toFixed(1)+','+py(currentCircuit[0]).toFixed(1)+' ';
+          for (let i=1;i<currentCircuit.length;i++){
+            rd += 'L'+px(currentCircuit[i]).toFixed(1)+','+py(currentCircuit[i]).toFixed(1)+' ';
+          }
+          routeEl.setAttribute('d', rd);
+          document.getElementById('panel').classList.add('open');
+          setupAnim(routeEl);
+          statusEl.textContent = 'Route imported successfully!';
+          
+          // Show stats if available
+          if(data.stats){
+            document.getElementById('statSteps').textContent = data.stats.steps;
+            document.getElementById('statDist').textContent = data.stats.distance;
+            document.getElementById('statStreets').textContent = data.stats.streets;
+            document.getElementById('statOverhead').textContent = data.stats.overhead;
+            document.getElementById('statTurns').textContent = data.stats.turns || 0;
+          }
+        }
+      } catch(err) {
+        statusEl.textContent = 'Error importing route: invalid file';
+        console.error(err);
+      }
+    };
+    reader.readAsText(file);
+    this.value = '';
+  };
+
+  statusEl.textContent = `Loaded ${nodes.length} intersections, ${edges.length} street segments. Paint an area to begin.`;
+})();
+</script>
+</body>
+</html>
